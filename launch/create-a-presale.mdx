@@ -1,0 +1,270 @@
+---
+title: "Create a Presale"
+description: "Open a WPizza presale. Tokens and rules are locked in before anyone can buy."
+---
+
+# Create a Presale
+
+A WPizza presale is a timed sale with a hard cap, a soft cap, and liquidity that is added and locked if the sale succeeds.
+
+You already have a token. This page is only about opening the sale. Token creation is on [Create a Token](./create-a-tax-free-token.md).
+
+## Why this is safe
+
+### Funds and tokens are locked in first
+
+The sale does not start on a promise. Tokens for buyers and tokens for the pool are moved into the presale when it is created. Raised payments stay in that contract until the sale is finalized.
+
+### Sale rules cannot move
+
+Hard cap, soft cap, min buy, max buy, start time, and end time are set at creation. The sale cannot raise more than the hard cap. One wallet cannot take more than the max. Buys are only accepted inside the time window.
+
+### Creator privileges
+
+The creator must make the first buy. The factory will not open the sale without it.
+
+After that, the creator can:
+
+- cancel the sale before it is finalized
+- finalize early if they do not want to wait for the end time
+
+They cannot change caps, times, vesting, or the LP lock after the sale exists. If they cancel, the sale fails and buyers are refunded. If they finalize early and the soft cap is missed, it also fails.
+
+On a successful close, leftover raised funds and leftover tokens not needed for claims go back to the creator. If the sale failed, they can recover the unsold tokens.
+
+### Buyer rights
+
+Buyers get a fixed allocation from the published rate: payment against hard cap and sale amount.
+
+If the sale succeeds, they can claim on the vesting schedule that was set at creation. Nobody can rewrite that schedule later.
+
+If the sale fails or is canceled, they can refund the exact amount they paid.
+
+After the end time, any buyer (or anyone else) can finalize. The team does not have to be online for people to get their tokens or their money back.
+
+Receipts that track allocations cannot be transferred. A claim cannot be sold off before it unlocks.
+
+### Liquidity on success
+
+A fixed percent of what was raised goes into the pool. That LP is locked until the published release date. Adding liquidity is not a manual step the creator can skip.
+
+### What nobody can do
+
+- start a sale without depositing the tokens
+- skip the creator’s first buy
+- raise past the hard cap
+- finalize twice
+- claim before a successful finalize
+- refund after a successful sale
+- trade the presale receipt tokens
+
+## Launch parameters
+
+| Parameter | Description |
+| --------- | ----------- |
+| **Token** | Token being sold. Must already exist. |
+| **Payment token** | What buyers pay with. BNB or an ERC-20. |
+| **Owner** | Owner of the presale contract. |
+| **Creator** | Address that opens the sale. Must be the wallet calling the factory. |
+| **LP recipient** | Address that owns the locked LP position. |
+| **Sale token amount** | How many tokens are offered to buyers. |
+| **Hard cap** | Maximum payment the sale can accept. |
+| **Soft cap** | Minimum payment needed for the sale to succeed. |
+| **Min contribution** | Smallest buy allowed. |
+| **Max contribution** | Largest total one wallet can put in. |
+| **Start / end time** | Sale window. |
+| **Liquidity percent** | Share of raised funds that goes into the pool. |
+| **LP release date** | When locked LP can be unlocked. Must be after the sale ends. |
+| **TGE date** | When buyers can start claiming. Must be at or after the sale end. |
+| **TGE percent** | Share of each buyer’s tokens unlocked at TGE. |
+| **Vesting cycle** | Time between later unlocks. Unused if TGE is 100%. |
+| **Vesting cycle percent** | Share unlocked each cycle. Unused if TGE is 100%. |
+| **LP lock description** | Text stored with the lock. |
+| **Presale receipt name / symbol** | Name of the non-transferable receipt used to track claims. |
+| **Initial buy** | Creator’s first purchase. Required. Paid when you call the factory. |
+
+Tokens you must send at creation:
+
+**sale amount + sale amount × liquidity percent**
+
+That covers buyers and the pool.
+
+## What happens when you create it
+
+1. The factory checks caps, times, vesting, and the first buy.
+2. It pulls the required sale tokens from you.
+3. It clones a presale contract and initializes it with your rules.
+4. It runs the creator’s first buy.
+5. The sale is live on the clock you set.
+
+Buyers then call `buy` during the window. After `endTime`, anyone can `finalize`. The creator can also `earlyFinalize` or `cancelPresale`.
+
+### If it succeeds
+
+- LP is added through WPizza
+- 100% of that user LP is locked until `lpReleaseDate`
+- Remaining raised funds go to the creator
+- Extra tokens not needed for claims go back to the creator
+- Buyers `claim` on the vesting schedule
+
+### If it fails
+
+- Buyers `refund`
+- Creator can recover unsold tokens
+
+## In short
+
+Deposit the tokens first. Set the caps and the lock date. Buy first yourself. If people fill the soft cap, the pool is created and locked. If they do not, everyone gets their money back.
+
+---
+
+# For developers
+
+```solidity
+function createPresale(
+    PresaleCreationParams calldata params,
+    uint256 initialAmountToBuy
+) external payable nonReentrant returns (address presale);
+```
+
+`params.creator` must be `msg.sender`.
+
+Native payment (`paymentToken == address(0)`): send `msg.value == initialAmountToBuy`.  
+ERC-20 payment: approve the factory for `initialAmountToBuy` and for the token deposit. `msg.value` must be `0`.
+
+Approve the factory for:
+
+```text
+saleTokenAmount + saleTokenAmount * liquidityPercent / 10_000
+```
+
+## Struct
+
+```solidity
+struct PresaleCreationParams {
+    address owner;
+    address creator;
+    address token;
+    address paymentToken;       // address(0) = BNB
+    address lpRecipient;
+    uint256 saleTokenAmount;
+    uint256 hardCap;
+    uint256 softCap;
+    uint256 minContribution;
+    uint256 maxContribution;
+    uint256 startTime;
+    uint256 endTime;
+    uint256 liquidityPercent;   // 1–10_000 bps
+    uint256 lpReleaseDate;
+    uint256 tgeDate;
+    uint256 tgeBps;             // 10_000 = 100% at TGE
+    uint256 vestingCycle;
+    uint256 vestingCycleBps;
+    string lpLockDescription;
+    string presaleTokenName;
+    string presaleTokenSymbol;
+}
+```
+
+## Human field → Solidity field
+
+| Human | Solidity |
+| ----- | -------- |
+| Owner | `owner` |
+| Creator | `creator` |
+| Token | `token` |
+| Payment token | `paymentToken` |
+| LP recipient | `lpRecipient` |
+| Sale token amount | `saleTokenAmount` |
+| Hard cap | `hardCap` |
+| Soft cap | `softCap` |
+| Min / max contribution | `minContribution` / `maxContribution` |
+| Start / end | `startTime` / `endTime` |
+| Liquidity percent | `liquidityPercent` |
+| LP release date | `lpReleaseDate` |
+| TGE date / percent | `tgeDate` / `tgeBps` |
+| Vesting cycle / percent | `vestingCycle` / `vestingCycleBps` |
+| Lock description | `lpLockDescription` |
+| Receipt name / symbol | `presaleTokenName` / `presaleTokenSymbol` |
+| Initial buy | `initialAmountToBuy` (+ `msg.value` if BNB) |
+
+## Checks the factory and presale enforce
+
+Factory:
+
+- `creator == msg.sender`
+- `owner`, `creator`, `token`, `lpRecipient` not zero
+- `paymentToken != token`
+- `initialAmountToBuy > 0`
+- `minContribution > 0`
+- `maxContribution >= minContribution`
+- first buy sits between min and max
+- you hold enough sale tokens for sale + LP
+
+Presale `initialize`:
+
+- `saleTokenAmount > 0`, `hardCap > 0`
+- `0 < softCap <= hardCap`
+- `startTime < endTime`
+- `0 < liquidityPercent <= 10_000`
+- `lpReleaseDate > endTime`
+- `tgeDate >= endTime`
+- `tgeBps <= 10_000`
+- if `tgeBps == 10_000`: cycle and cycle bps must be `0`
+- else: cycle and cycle bps `> 0`, `tgeBps + cycleBps <= 10_000`, and `(10_000 - tgeBps)` must divide evenly by `vestingCycleBps`
+
+`firstSale` can only be called by the factory, and only once.
+
+## Allocation
+
+```solidity
+tokens = paymentAmount * saleTokenAmount / hardCap
+```
+
+## After creation
+
+| Action | Who | When |
+| ------ | --- | ---- |
+| `buy` | buyers | `startTime <= now < endTime` |
+| `cancelPresale` | creator | before finalize |
+| `earlyFinalize` | creator | before finalize |
+| `finalize` | anyone | `now >= endTime` |
+| `claim` | buyers | finalized and successful |
+| `refund` | buyers | finalized and failed |
+| `recoverFailedTokens` | creator | finalized and failed |
+
+On success, `_createLiquidity` calls `WpizzaTokenFactory.launchToken` with `lpPercentToLock = 10_000` and `shouldLockLp = true`.
+
+## Example
+
+```solidity
+PresaleCreationParams memory params = PresaleCreationParams({
+    owner: msg.sender,
+    creator: msg.sender,
+    token: token,
+    paymentToken: address(0),          // BNB
+    lpRecipient: msg.sender,
+    saleTokenAmount: 500_000 ether,
+    hardCap: 100 ether,
+    softCap: 40 ether,
+    minContribution: 0.05 ether,
+    maxContribution: 5 ether,
+    startTime: block.timestamp + 1 hours,
+    endTime: block.timestamp + 3 days,
+    liquidityPercent: 6000,            // 60%
+    lpReleaseDate: block.timestamp + 180 days,
+    tgeDate: block.timestamp + 3 days,
+    tgeBps: 2000,                      // 20% at TGE
+    vestingCycle: 30 days,
+    vestingCycleBps: 2000,             // 20% per cycle
+    lpLockDescription: "Presale LP lock",
+    presaleTokenName: "MTK Presale",
+    presaleTokenSymbol: "pMTK"
+});
+
+address presale = factory.createPresale{value: 1 ether}(params, 1 ether);
+```
+
+Token deposit in that example:
+
+`500_000 + 500_000 * 6000 / 10_000 = 800_000` tokens, approved to the factory before the call.

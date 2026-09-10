@@ -1,0 +1,96 @@
+---
+title: "WPizza Router"
+description: "WpizzaRouterV2 seeds Pizza Curve liquidity and routes buys and sells."
+---
+
+# WPizza Router
+
+`WpizzaRouterV2` is the swap entry for Pizza Curve pairs.
+
+Like a Pancake router. Two differences matter:
+
+- `addLiquidity` takes **three** tokens and will not create a pair
+- there is no remove-liquidity path
+
+Pair layout and pricing: [WPizza Pair](./wpizza-pair.mdx).
+
+## Add liquidity
+
+Called once by the factory when the market opens.
+
+```text
+tokenA = project token
+tokenB = virtual token
+tokenC = payment token   // used to look up the pair
+```
+
+The router requires `getPair(tokenA, tokenC)` to already exist. It transfers A and B into the pair and calls `mint`. Token C is not deposited here. Real payment enters later through swaps.
+
+`addLiquidityETH` is not used.
+
+## Swaps
+
+Path is two tokens: payment ↔ project.
+
+BNB routes wrap and unwrap WETH. The first or last address in the path must be WETH for those functions.
+
+Fee-on-transfer tokens must use the `SupportingFeeOnTransferTokens` variants. The factory already does that when the launched token has tax.
+
+For those variants, input against the **payment** side is measured from the real reserve (`getRealReserve`), not from the virtual reserve.
+
+Quotes (`getAmountsOut`, `getAmountsIn`, `quote`) use the virtual reserves exposed by `getReserves()`.
+
+## What is missing on purpose
+
+Remove liquidity functions are omitted. Curve LP is not withdrawn. After graduation you trade on PancakeSwap, not here.
+
+---
+
+# For developers
+
+Constructor:
+
+```solidity
+constructor(address _factory, address _WETH)
+```
+
+Seed liquidity:
+
+```solidity
+function addLiquidity(
+    address tokenA,      // project
+    address tokenB,      // virtual
+    address tokenC,      // payment (pair key)
+    uint amountADesired,
+    uint amountBDesired,
+    uint amountAMin,
+    uint amountBMin,
+    address to,
+    uint deadline
+) external returns (uint amountA, uint amountB, uint liquidity);
+```
+
+Reverts with `PAIR_NOT_EXIST` if the factory has no pair for `(tokenA, tokenC)`.
+
+Exact-in / exact-out:
+
+```solidity
+swapExactTokensForTokens
+swapTokensForExactTokens
+swapExactETHForTokens
+swapTokensForExactETH
+swapExactTokensForETH
+swapETHForExactTokens
+```
+
+Fee-on-transfer:
+
+```solidity
+swapExactTokensForTokensSupportingFeeOnTransferTokens
+swapExactETHForTokensSupportingFeeOnTransferTokens
+swapExactTokensForETHSupportingFeeOnTransferTokens
+```
+
+Deadline modifier: `deadline >= block.timestamp` or `EXPIRED`.
+
+`receive()` only accepts ETH from WETH.

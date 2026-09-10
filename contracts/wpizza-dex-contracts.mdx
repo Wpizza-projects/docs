@@ -1,0 +1,44 @@
+---
+title: "WPizzaDex contracts"
+description: "Factory, pair implementation, and router on BNB Smart Chain."
+---
+# WPizzaDex contracts
+
+These three contracts run Pizza Curve markets on BSC.
+
+Guides: [What is WPizzaDex](/wpizza-dex/what-is-wpizza-dex), [Factory](/wpizza-dex/wpizza-factory), [Pair](/wpizza-dex/wpizza-pair), [Router](/wpizza-dex/wpizza-router).
+
+## Addresses (BSC)
+
+| Contract | Address | BscScan |
+| -------- | ------- | ------- |
+| Pair factory | `0x472A5aC56aC3D585599a55Bfc6326837e0a93696` | [View](https://bscscan.com/address/0x472A5aC56aC3D585599a55Bfc6326837e0a93696) |
+| Pair implementation | `0x75f4660B15F9Ea1dC9D2B99a1283c0BD7BDC07B6` | [View](https://bscscan.com/address/0x75f4660B15F9Ea1dC9D2B99a1283c0BD7BDC07B6) |
+| WPizza V2 Router | `0x7E63B5Fc066150db24c1E581d5BAD2ba18eA4170` | [View](https://bscscan.com/address/0x7E63B5Fc066150db24c1E581d5BAD2ba18eA4170) |
+
+DexScreener factory feed: [f:0x472A5aC56aC3D585599a55Bfc6326837e0a93696](https://dexscreener.com/bsc/f:0x472A5aC56aC3D585599a55Bfc6326837e0a93696)
+
+## How they connect
+
+`WpizzaFactory` clones `WpizzaPair` from the implementation above. Each market is a clone, not a new deploy of the full pair bytecode.
+
+`createPair(PairCreationParams)` on the factory is the only way to open a curve market. The clone salt is:
+
+```solidity
+keccak256(abi.encodePacked(projectToken, paymentToken, block.chainid))
+```
+
+`WpizzaRouterV2` is pointed at that factory. It seeds virtual liquidity (`addLiquidity` with project + virtual tokens) and routes buys and sells. It does not create pairs and it does not remove liquidity.
+
+The factory must have `wPizzaV2Router` and `wPizzaLock` set before a market can open. Lock address is on the [token factory](/contracts/wpizza-token-factory-contrats) page.
+
+## What to call
+
+| You want | Call |
+| -------- | ---- |
+| Open a Pizza Curve market | Factory `createPair(PairCreationParams)` |
+| Buy / sell | Router swap functions |
+| Read reserves | Pair `getReserves()` and `getRealReserve()` |
+| Read trades | Pair `getTrades()` / `getLatestTrades()` |
+
+Do not send tokens straight into a pair and expect a mint. Use the router.

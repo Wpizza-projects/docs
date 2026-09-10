@@ -1,0 +1,152 @@
+---
+title: "Add Initial Liquidity"
+description: "Add the first pool for a token with launch, openMarket, or launchToken."
+---
+
+# Add Initial Liquidity
+
+These three factory calls all end in the same place: tokens and the payment asset go into a PancakeSwap V2 pair, LP is split, and a lock is applied if you asked for one.
+
+They differ only in what already exists when you call them.
+
+| Function | Token | Pair | What it does |
+| -------- | ----- | ---- | ------------ |
+| `launch` | created in the call | created in the call | Create the token, then add LP. |
+| `openMarket` | already deployed | pair must already exist | Pull your tokens, add LP to that pair. |
+| `launchToken` | already deployed | created if missing | Pull your tokens, create the pair if needed, add LP. |
+
+Pizza Curve graduation and a successful presale both call `launchToken` for you. Use this page when you are adding the pool yourself.
+
+Token fields on `creationParams` follow [Create a Token](./create-a-tax-free-token.md) and [Create a Tax Token](./create-a-tax-token.md). This page only covers the liquidity side.
+
+## What they share
+
+You send:
+
+- project tokens (`initialTokenAmountToAdd`)
+- payment tokens, or BNB if `pairedToken` is `address(0)` (`initialLpAmountInPairedToken`)
+
+The factory adds that liquidity to PancakeSwap V2. LP is received by the factory, then split:
+
+- **1%** locked for WPizza
+- **99%** is yours
+- of your 99%, `lpPercentToLock` is locked until `lpReleaseDate`
+- the rest is sent to `lpRecipient`
+
+`lpRecipient` cannot be the zero address.
+
+If you deposited more project tokens than the pool needs, the extra is sent back to the original recipient.
+
+## When to use which
+
+**`launch`** — one step. New token and first pool together.
+
+**`openMarket`** — token and pair are already there. Fails if the pair address does not match `getPair(token, pairedToken)`.
+
+**`launchToken`** — token exists, pair may not. Creates the pair when `getPair` is zero. This is the path used after a presale or a Pizza Curve graduation.
+
+## Launch parameters
+
+| Parameter | Description |
+| --------- | ----------- |
+| **Token amount** | Project tokens added to the pool. |
+| **Payment amount** | BNB or ERC-20 added to the pool. |
+| **Payment token** | `creationParams.pairedToken`. `address(0)` = BNB. |
+| **LP recipient** | Receives unlocked LP (and owns the lock). |
+| **Lock percent** | Share of *your* 99% LP to lock. `10_000` = 100%. |
+| **Should lock** | Must match the percent: lock on → percent `> 0`, lock off → percent `0`. |
+| **LP release date** | Unlock time. Must be in the future if you lock. |
+| **Lock description** | Text stored with the lock. |
+
+---
+
+# For developers
+
+```solidity
+function launch(TokenLaunchParams calldata _params)
+    external payable nonReentrant returns (address token, address pair);
+
+function openMarket(
+    TokenLaunchParams calldata _params,
+    address token,
+    address pair
+) external payable nonReentrant;
+
+function launchToken(
+    TokenLaunchParams calldata _params,
+    address token
+) external payable nonReentrant returns (address pair);
+```
+
+BNB: `msg.value == initialLpAmountInPairedToken`.  
+ERC-20: approve that amount, `msg.value` must be `0`.
+
+`openMarket` and `launchToken` also pull `initialTokenAmountToAdd` from `msg.sender`.  
+`launch` mints the token to the factory first, so you do not transfer it yourself.
+
+## Struct
+
+```solidity
+struct TokenLaunchParams {
+    TokenCreationParams creationParams;
+    uint initialLpAmountInPairedToken;
+    uint initialTokenAmountToAdd;
+    address lpRecipient;
+    uint lpPercentToLock;       // 0–10_000, of the user's 99%
+    bool shouldLockLp;
+    uint lpReleaseDate;
+    string lockDescription;
+}
+```
+
+`creationParams` is fully used by `launch` (it creates the token).  
+`openMarket` / `launchToken` still read `pairedToken` and `recipient` from it. Other creation fields are unused there, except as metadata passed through.
+
+## Checks
+
+- `initialLpAmountInPairedToken > 0`
+- `lpPercentToLock <= 10_000`
+- lock flag and percent must agree
+- if locking, `lpReleaseDate > block.timestamp`
+- `lpRecipient != address(0)`
+- `openMarket`: `pair == getPair(token, pairedToken)`
+- caller holds enough project tokens (`openMarket` / `launchToken`) and enough payment tokens (or BNB)
+
+Router: PancakeSwap V2 `0x10ED43C718714eb63d5aA57B78B54704E256024E`.
+
+## Example
+
+Existing token, create pair if needed, lock all user LP:
+
+```solidity
+TokenLaunchParams memory params = TokenLaunchParams({
+    creationParams: TokenCreationParams({
+        name: "",
+        symbol: "",
+        initialSupply: 0,
+        owner: msg.sender,
+        recipient: msg.sender,
+        tokenType: 1,
+        buyTax: 0,
+        sellTax: 0,
+        transferTax: 0,
+        taxRecipients: new address[](0),
+        taxPercentages: new uint256[](0),
+        expirationDate: 0,
+        pairedToken: address(0),
+        isMintable: false,
+        isBurnable: false,
+        isPausable: false
+    }),
+    initialLpAmountInPairedToken: 2 ether,
+    initialTokenAmountToAdd: 400_000 ether,
+    lpRecipient: msg.sender,
+    lpPercentToLock: 10_000,
+    shouldLockLp: true,
+    lpReleaseDate: block.timestamp + 180 days,
+    lockDescription: "Initial LP lock"
+});
+
+IERC20(token).approve(address(factory), 400_000 ether);
+address pair = factory.launchToken{value: 2 ether}(params, token);
+```

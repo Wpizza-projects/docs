@@ -1,0 +1,67 @@
+---
+title: "Token factory contracts"
+description: "WpizzaTokenFactory, token implementations, presale clone, and lock on BSC."
+---
+
+# Token factory contracts
+
+`WpizzaTokenFactory` deploys tokens, opens optional Pancake pairs, runs presales, and adds initial liquidity.
+
+Related guides: [Create a token](/launch/create-a-tax-free-token), [Tax token](/launch/create-a-tax-token), [Presale](/launch/create-a-presale), [Add liquidity](/launch/add-initial-liquidity).
+
+## Addresses (BSC)
+
+| Contract | Address | BscScan |
+| -------- | ------- | ------- |
+| Token factory | `0x7A65CEDb06f1dd03A9004244E158D5Cfe2Dd42b3` | [View](https://bscscan.com/address/0x7A65CEDb06f1dd03A9004244E158D5Cfe2Dd42b3) |
+| Token 1 — basic / tax-free | `0x485B973b4895df7Abf5dFacaafAc6C1DDb939656` | [View](https://bscscan.com/address/0x485B973b4895df7Abf5dFacaafAc6C1DDb939656) |
+| Token 2 — mintable | `0x1FAB94A1eaC393e537BdF0E3863f9c3B8DB577fA` | [View](https://bscscan.com/address/0x1FAB94A1eaC393e537BdF0E3863f9c3B8DB577fA) |
+| Token 3 — burnable | `0x2b3b3ad6c67b58E6c1459063506F5aCCC29894E4` | [View](https://bscscan.com/address/0x2b3b3ad6c67b58E6c1459063506F5aCCC29894E4) |
+| Token 4 — pausable | `0x3823dD54e3Aca29700c63A6927Ca8a0aB0608049` | [View](https://bscscan.com/address/0x3823dD54e3Aca29700c63A6927Ca8a0aB0608049) |
+| Token 5 — tax | `0xDf39F7995d348cc6EB84326ae108330b5fB2fE65` | [View](https://bscscan.com/address/0xDf39F7995d348cc6EB84326ae108330b5fB2fE65) |
+| Token 6 — configurable | `0xB465055Ae7Ae830bC2F85d6b20eB164F3C016210` | [View](https://bscscan.com/address/0xB465055Ae7Ae830bC2F85d6b20eB164F3C016210) |
+| Presale implementation | `0x0b16Cb76637a73855D0F91A7829bECf2CC5dcCFB` | [View](https://bscscan.com/address/0x0b16Cb76637a73855D0F91A7829bECf2CC5dcCFB) |
+| WPizza Lock | `0x9e19cFA432e6777651a3832F5f7220B11A71c692` | [View](https://bscscan.com/address/0x9e19cFA432e6777651a3832F5f7220B11A71c692) |
+
+Pizza Curve factory and router: [WPizzaDex contracts](/contracts/wpizza-dex-contracts).
+
+## Token types
+
+New tokens are clones of `token1`–`token6`.
+
+| `tokenType` | Implementation | Behavior |
+| ----------- | -------------- | -------- |
+| `1` | token1 | Tax-free, fixed supply |
+| `2` | token2 | Mintable |
+| `3` | token3 | Burnable |
+| `4` | token4 | Pausable |
+| `5` | token5 | Tax |
+| `6` | token6 | Tax + mint / burn / pause flags |
+
+Salt for a clone:
+
+```solidity
+keccak256(abi.encode(msg.sender, name, symbol, tokenType, createdTokenCount[creator]))
+```
+
+`predictNextTokenAddress` on the factory uses the same salt.
+
+## Factory entry points
+
+| Function | Use |
+| -------- | --- |
+| `createToken` | Token + Pancake pair (no LP) |
+| `createTokenWithNoPair` | Token only (Pizza Curve uses this) |
+| `launch` | Create token and add LP |
+| `openMarket` | Existing token + existing pair, add LP |
+| `launchToken` | Existing token, create pair if needed, add LP |
+| `createPresale` | Clone the presale implementation and run the first buy |
+
+PancakeSwap V2 router used by the token factory:
+
+`0x10ED43C718714eb63d5aA57B78B54704E256024E`
+
+## Presale and lock
+
+Presales are clones of `0x0b16Cb76637a73855D0F91A7829bECf2CC5dcCFB`.  
+Locks go to [WPizza Lock](/wpizza-lock/what-is-wpizza-lock) at `0x9e19cFA432e6777651a3832F5f7220B11A71c692`.

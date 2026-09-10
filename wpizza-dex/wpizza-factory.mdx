@@ -1,0 +1,90 @@
+---
+title: "WPizza Factory"
+description: "WpizzaFactory opens Pizza Curve markets and clones pairs."
+---
+
+# WPizza Factory
+
+`WpizzaFactory` is the entry point for a Pizza Curve market.
+
+It does not create ordinary Pancake pairs. For that, use the token factory on [Add Initial Liquidity](../launch/add-initial-liquidity.mdx).
+
+Full launch fields: [Create a Pizza Curve Token](../launch/create-pizza-curve-token.md).
+
+## What `createPair` does
+
+`createPair(PairCreationParams)` is payable and non-reentrant. In order it:
+
+1. Takes the initial buy (BNB wrapped to WETH, or ERC-20 `transferFrom`)
+2. Creates the project token (type 6, burnable)
+3. Creates the virtual payment token (mintable + burnable, owned by the pair)
+4. Clones `WpizzaPair` with salt `keccak256(token, paymentToken, chainid)`
+5. Initializes the pair with the graduation target
+6. Adds project + virtual liquidity through the WPizza router (LP to `0xdeaD`)
+7. Hands token ownership back to your owner
+8. Marks the pair as an AMM pair if the token has tax
+9. Runs the first buy to `creationParams.recipient`
+10. Stores a `LaunchedMarket` row
+
+`_createPair(tokenA, tokenB)` is internal. External callers only open a market through `createPair(PairCreationParams)`.
+
+## Views
+
+- `getPair[token][payment]`
+- `allPairs` / `getAllPairs()` / `allPairsLength()`
+- `markets` / `getMarkets()`
+- `marketByAddress[creator]`
+- `isWpizzaPair[pair]`
+- `token0[pair]`, `token1[pair]` (project token and payment token)
+
+## Admin
+
+| Role | Can set |
+| ---- | ------- |
+| `feeToSetter` | `feeTo`, `feeToSetter` |
+| `wPizzaSetter` | pair implementation, router, lock, setter |
+
+`wPizzaV2Router` and `wPizzaLock` must be set before a market can open.
+
+---
+
+# For developers
+
+```solidity
+function createPair(PairCreationParams memory params)
+    external payable nonReentrant returns (address pair);
+```
+
+Pair clone:
+
+```solidity
+bytes32 salt = keccak256(abi.encodePacked(token0_, token1_, block.chainid));
+pair = Clones.cloneDeterministic(pairImplementation, salt);
+```
+
+`token0_` here is the project token, `token1_` the payment token. That order is fixed by the factory. It is not Pancake’s address sort.
+
+Market record:
+
+```solidity
+struct LaunchedMarket {
+    address creator;
+    address token;
+    address pair;
+    address paymentToken;
+    uint targetAmount;
+    uint virtualAmount;
+    uint tokenAmount;
+    uint date;
+    uint index;
+}
+```
+
+Hard reverts worth knowing:
+
+- `InvalidAmounts` — any of the four amounts is 0
+- `InvalidVirtualAndPaymentAmount` — virtual < target
+- `InvalidInitialBuyAmount` — BNB or ERC-20 deposit mismatch
+- `NativeTokenNotAllowed` — `msg.value > 0` on an ERC-20 launch
+- `PairAlreadyExist` / `PairExists`
+- `OwnerShipNotTransferedToFactory` — token owner must still be the factory before the first buy

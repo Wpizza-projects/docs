@@ -1,0 +1,144 @@
+---
+title: "Create a Tax Token"
+description: "Create a tax token with WPizza. Same flow as a basic token, with tax settings added."
+---
+
+# Create a Tax Token
+
+Same creation flow as [Create a Token](./create-a-tax-free-token.md).
+
+What changes: you use type **5**, taxes are applied, and those tax fields are actually used.
+
+Everything else is unchanged:
+
+- name, symbol, supply, owner, recipient
+- optional PancakeSwap pair
+- `pairedToken = address(0)` means BNB
+- `createToken` vs `createTokenWithNoPair`
+- no liquidity is added at creation
+
+Read the previous page for those parts.
+
+## What is different
+
+A tax token charges a fee on buy, sell, and/or transfer.
+
+| Parameter            | Description |
+| -------------------- | ----------- |
+| **Buy Tax**          | Taken when the token is bought. |
+| **Sell Tax**         | Taken when the token is sold. |
+| **Transfer Tax**     | Taken on normal transfers. |
+| **Tax Recipients**   | Wallets that receive the tax. |
+| **Tax Percentages**  | Share of the tax for each recipient. Same length as recipients. |
+| **Expiration Date**  | When taxes stop. `0` means they do not expire. |
+
+Set a tax to `0` to turn that side off.
+
+This type is not mintable, burnable, or pausable. Those flags still do nothing. For mixed controls use configurable token (type `6`), not this page.
+
+## How creation differs
+
+On [Create a Token](./create-a-tax-free-token.md), types `1`–`3` call `_createNonTaxToken`.
+
+A tax token uses `_createTaxToken`.
+
+1. The implementation cloned is `token5`.
+2. If a pair is requested, the pair is created **before** initialize, because the pair address is passed into the token.
+3. Initialize receives the tax fields and the pair.
+
+After that, the factory records the token the same way as any other created token.
+
+---
+
+# For developers
+
+Same factory and struct as [Create a Token](./create-a-tax-free-token.md).
+
+```solidity
+tokenType = 5; // TokenType.TaxToken
+```
+
+Ignored on types `1`–`3`, used here:
+
+- `buyTax`
+- `sellTax`
+- `transferTax`
+- `taxRecipients`
+- `taxPercentages`
+- `expirationDate`
+- `pairedToken` / `pair` (pair is passed into initialize)
+
+Still ignored:
+
+- `isMintable`
+- `isBurnable`
+- `isPausable`
+
+## Init
+
+```solidity
+IToken5(token).initialize(
+    name,
+    symbol,
+    initialSupply,
+    owner,
+    recipient,
+    buyTax,
+    sellTax,
+    transferTax,
+    taxRecipients,
+    taxPercentages,
+    pair,              // address(0) if createTokenWithNoPair
+    expirationDate
+);
+```
+
+`taxRecipients.length` must match `taxPercentages.length`.
+
+## Example
+
+Same params as the previous page, plus taxes:
+
+```solidity
+TokenCreationParams memory params = TokenCreationParams({
+    name: "My Tax Token",
+    symbol: "MTT",
+    initialSupply: 1_000_000 ether,
+    owner: msg.sender,
+    recipient: msg.sender,
+    tokenType: 5,
+    buyTax: 200,                   // 2% if the token uses bps
+    sellTax: 300,                  // 3%
+    transferTax: 0,
+    taxRecipients: recipients,     // address[]
+    taxPercentages: shares,        // uint256[], same length
+    expirationDate: 0,
+    pairedToken: address(0),
+    isMintable: false,
+    isBurnable: false,
+    isPausable: false
+});
+
+(address token, address pair) = factory.createToken(params);
+```
+
+Pair prediction and salt are unchanged. Use `tokenType: 5` in `predictNextTokenAddress`.
+
+---
+
+## Remark: configurable token (type 6)
+
+Type **5** is tax only.
+
+Type **6** (`ConfigurableToken`) uses the same tax fields as this page, plus the flags that type 5 ignores:
+
+- `isMintable`
+- `isBurnable`
+- `isPausable`
+
+It clones `token6` and initializes through `IToken6.initialize(...)`, which takes the tax arguments **and** those three flags.
+
+Use type 5 if you only need tax.  
+Use type 6 if the token must be tax + mint, burn, and/or pause.
+
+Creation, pair rules, and the shared fields are still the same as [Create a Token](./create-a-tax-free-token.md).

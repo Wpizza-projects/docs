@@ -1,0 +1,121 @@
+---
+title: "WPizza Pair"
+description: "The Pizza Curve pair: virtual pricing reserve, real payment reserve, and automatic graduation."
+---
+
+# WPizza Pair
+
+`WpizzaPair` is a Pancake-style pair rebuilt for the curve.
+
+It is cloned by the factory. You do not deploy one yourself.
+
+See [What is WPizza Dex](./what-is-wpizza-dex.mdx) for the overview.
+
+## Tokens and reserves
+
+| Field | Token | Reserve | Used for |
+| ----- | ----- | ------- | -------- |
+| `token0` | project token | `reserve0` | inventory + pricing |
+| `token1` | real payment token | `reserve2` | graduation |
+| `token2` | virtual payment token | `reserve1` | pricing |
+
+`getReserves()` returns `reserve0`, `reserve1` (virtual), and the last timestamp.  
+`getRealReserve()` returns `reserve2`.
+
+K is checked on token 0 × token 2, with a 0.25% fee factor (`25 / 10000`), same shape as Pancake.
+
+## Trading
+
+Swaps only work while `end == 0` or `block.timestamp < end`.
+
+### Buy (payment in)
+
+1. Real token 1 lands in the pair
+2. Pair mints the same amount of token 2
+3. Project tokens go out
+4. `reserve2` increases
+
+### Sell (project token in)
+
+1. Project tokens land in the pair
+2. Pair sends real token 1 out
+3. Pair burns that amount of token 2
+4. `reserve2` decreases
+
+Each swap is stored in `swapEvents` so trades can be read on-chain (`getTrades`, `getLatestTrades`).
+
+## Liquidity
+
+`mint` runs once at creation: project token + virtual token in, LP out. That LP is sent to `address(0xdeaD)` by the factory.
+
+`burn` always returns `(0, 0)`. Liquidity is not withdrawn from this pair.
+
+`skim` and `sync` exist but still require the market not to have ended.
+
+## Graduation
+
+After every swap the pair checks:
+
+```text
+reserve2 >= targetReserve2Amount
+```
+
+If true, `_launch()` runs. Details are on [Migration to PancakeSwap](./migration-to-pancakeswap.mdx).
+
+Creator reward is **5%** of leftover project tokens (`CREATOR_REWARD = 5`). The rest of the leftover is burned. Creator tokens are locked for the lifetime of the market (`now - start`).
+
+---
+
+# For developers
+
+```solidity
+function initialize(
+    address token0_,
+    address token1_,
+    address token2_,
+    address factory_,
+    address wPizzaTokenFactory_,
+    address wPizzaLock_,
+    address creator_,
+    uint targetReserve2Amount_
+) public initializer;
+```
+
+Called by `WpizzaFactory` only.
+
+```solidity
+function swap(
+    uint amount0Out,
+    uint amount1Out,
+    address to,
+    bytes calldata data
+) external lock NotEnded;
+```
+
+`amount0Out` is project token out. `amount1Out` is **real** payment out.  
+`to` cannot be `token0` or `token1`.
+
+Virtual token:
+
+```solidity
+_mintToken2(amount1In);   // buy
+_burnToken2(amount1Out);  // sell
+```
+
+Fee check:
+
+```solidity
+balance0Adjusted = balance0 * 10000 - amount0In * 25
+balance2Adjusted = balance2 * 10000 - amount1In * 25
+balance0Adjusted * balance2Adjusted >= reserve0 * reserve1 * 10000^2
+```
+
+Reads:
+
+```solidity
+getReserves()
+getRealReserve()
+getTrades()
+getLatestTrades(uint256 limit)
+getLatestTradesByStartIndex(uint256 startIndex, uint256 limit)
+```

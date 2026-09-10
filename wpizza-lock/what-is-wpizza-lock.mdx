@@ -1,0 +1,148 @@
+---
+title: "What is WPizza Lock"
+description: "Lock tokens or LP, with a cliff or a vesting schedule. Locks are public and can be looked up by user or token."
+---
+
+# What is WPizza Lock
+
+WPizza Lock holds ERC-20s and Pancake-style LP tokens until a date you set. Pizza Curve graduation, presale LP, and the 1% protocol LP cut all use this contract.
+
+Address on BSC: [`0x9e19cFA432e6777651a3832F5f7220B11A71c692`](https://bscscan.com/address/0x9e19cFA432e6777651a3832F5f7220B11A71c692)
+
+You can also lock from the app without going through a launch.
+
+## Two kinds of lock
+
+**Normal lock** — full amount unlocks after one date.  
+**Vesting lock** — a share at TGE, then more each cycle.
+
+Both work on normal tokens and on LP tokens. If you mark a token as LP, the contract checks it is a real Uniswap V2 / Pancake pair (`factory.getPair(token0, token1) == token`).
+
+Tokens move into the lock contract at creation. The amount received must match the amount you declared (fee-on-transfer tokens cannot be locked as-is).
+
+## What the owner can do
+
+- `unlock` when the date (or vested amount) allows it
+- `editLock` — only **more** tokens and a **later** date, and only if nothing has been withdrawn yet
+- change the description
+- transfer ownership of the lock
+- `renounceLockOwnership` — send the lock to `address(0)` (used to burn control; Pizza Curve LP is sent this way in spirit via `0xdeaD` as LP recipient before lock)
+
+Nobody else can pull the tokens. There is no admin override on an individual lock.
+
+## Vesting
+
+Amounts use basis points (`10_000` = 100%).
+
+At TGE you unlock `tgeBps`. Every `cycle` seconds after that you unlock another `cycleBps`, until the lock is empty.
+
+Rules at creation:
+
+- `tgeDate` in the future
+- `cycle > 0`
+- `0 < tgeBps < 10_000`
+- `0 < cycleBps < 10_000`
+- `tgeBps + cycleBps <= 10_000`
+
+`multipleVestingLock` opens one vesting lock per owner in a single token transfer.
+
+## How launches use it
+
+| Source | What is locked |
+| ------ | -------------- |
+| Pizza Curve graduation | Creator leftover tokens for `marketDuration`; Pancake LP forever |
+| Presale success | Sale LP until `lpReleaseDate` |
+| `launch` / `openMarket` / `launchToken` | Your chosen % of the 99% user LP, plus the 1% WPizza cut |
+
+See [Migration to PancakeSwap](/wpizza-dex/migration-to-pancakeswap) and [Add initial liquidity](/launch/add-initial-liquidity).
+
+---
+
+# For developers
+
+```solidity
+function lock(
+    address owner,
+    address token,
+    bool isLpToken,
+    uint256 amount,
+    uint256 unlockDate,
+    string memory description
+) external returns (uint256 id);
+
+function vestingLock(
+    address owner,
+    address token,
+    bool isLpToken,
+    uint256 amount,
+    uint256 tgeDate,
+    uint256 tgeBps,
+    uint256 cycle,
+    uint256 cycleBps,
+    string memory description
+) external returns (uint256 id);
+
+function multipleVestingLock(
+    address[] calldata owners,
+    uint256[] calldata amounts,
+    address token,
+    bool isLpToken,
+    uint256 tgeDate,
+    uint256 tgeBps,
+    uint256 cycle,
+    uint256 cycleBps,
+    string memory description
+) external returns (uint256[] memory);
+
+function unlock(uint256 lockId) external;
+
+function editLock(
+    uint256 lockId,
+    uint256 newAmount,
+    uint256 newUnlockDate
+) external;
+```
+
+Approve the lock contract before calling. `msg.sender` is who pays the tokens. `owner` is who may later unlock.
+
+Normal lock stores the unlock time in `tgeDate` with `tgeBps = cycle = cycleBps = 0`.
+
+## Lock record
+
+```solidity
+struct Lock {
+    uint256 id;
+    address token;
+    address owner;
+    uint256 amount;
+    uint256 lockDate;
+    uint256 tgeDate;
+    uint256 tgeBps;
+    uint256 cycle;
+    uint256 cycleBps;
+    uint256 unlockedAmount;
+    string description;
+}
+```
+
+Withdrawable on a vesting lock:
+
+```text
+released = tgeShare + floor((now - tgeDate) / cycle) * cycleShare
+withdrawable = min(released, amount) - unlockedAmount
+```
+
+## Reads
+
+```solidity
+getLockById(id)
+getLockAt(index)
+getTotalLockCount()
+lpLocksForUser(user)
+normalLocksForUser(user)
+getLocksForToken(token, start, end)
+withdrawableTokens(lockId)
+cumulativeLockInfo(token)
+```
+
+LP and normal tokens are indexed separately so UIs can list them apart.

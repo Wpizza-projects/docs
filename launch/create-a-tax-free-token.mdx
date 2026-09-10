@@ -1,0 +1,304 @@
+---
+title: "Create a Tax-Free Token"
+description: "Create a tax-free, mintable, or burnable token with WPizza."
+---
+
+
+You pick a type, set a few fields, and WPizza deploys the token. You can also create a PancakeSwap pair at the same time.
+
+There are three types covered here:
+
+- **Tax-free (basic)** — fixed supply, no extra controls
+- **Mintable** — owner can mint more later
+- **Burnable** — anyone holding the token can burn their own balance
+
+Taxes, pause, and mixed options belong to other token types and are not used here.
+
+## Launch Parameters
+
+| Parameter            | Description |
+| -------------------- | ----------- |
+| **Token Name**       | Name of the token. |
+| **Token Symbol**     | Token ticker. |
+| **Token Supply**     | Amount minted at creation. Sent to the recipient. |
+| **Owner**            | Address that owns the token contract. |
+| **Recipient**        | Address that receives the initial supply. |
+| **Payment Token**    | Token used for the pair, if you create one. BNB or a supported ERC-20. |
+| **Create pair**      | Optional. If enabled, a PancakeSwap V2 pair is created with the payment token. |
+
+That is all you need for these three types.
+
+Buy tax, sell tax, transfer tax, tax wallets, expiration, mintable/burnable/pausable flags are ignored for tax-free, mintable, and burnable tokens.
+
+## Token types
+
+### Tax-free token
+
+A simple token.
+
+- Supply is minted once
+- No tax on buy, sell, or transfer
+- Owner cannot mint more
+- Holders cannot burn through a built-in burn function
+
+Use this when you want a fixed supply and nothing else.
+
+### Mintable token
+
+Same as tax-free, plus mint.
+
+- Owner can mint extra tokens after launch
+- Supply is not capped by the contract
+- Still no tax
+
+Use this when you may need to issue more tokens later.
+
+### Burnable token
+
+Same as tax-free, plus burn.
+
+- Holders can burn tokens they own
+- Burning lowers total supply
+- Owner does not get a mint function from this type
+- Still no tax
+
+Use this when you want supply to be able to go down.
+
+## How the token is created
+
+When you confirm:
+
+### 1. Type is selected
+
+WPizza maps your choice to a type index:
+
+- Tax-free → type `1`
+- Mintable → type `2`
+- Burnable → type `3`
+
+Each type uses its own implementation contract.
+
+### 2. Token is cloned
+
+A new token is created from that implementation.
+
+It is initialized with:
+
+- name
+- symbol
+- initial supply
+- owner
+- recipient
+
+The full initial supply is minted to the recipient.
+
+### 3. Pair (optional)
+
+If you asked for a pair:
+
+- `address(0)` as payment token means BNB (WETH under the hood)
+- any other address is used as the ERC-20 pair token
+- a PancakeSwap V2 pair is created
+
+No liquidity is added in this step. Pair creation only opens the pair address.
+
+If you do not want a pair yet, the token is created alone.
+
+## After creation
+
+You own the token contract (if you set yourself as owner).
+
+The recipient holds the supply.
+
+You can later:
+
+- add liquidity through a normal launch
+- open a presale
+- keep the token unused until you need it
+
+This page only covers **creating** the token, not adding LP or starting a sale.
+
+## In short
+
+- Tax-free: fixed supply, no extras
+- Mintable: owner can mint later
+- Burnable: holders can burn
+- No taxes on any of these three
+- Pair is optional and does not add liquidity by itself
+
+---
+
+# For developers
+
+Call `WpizzaTokenFactory.createToken` or `createTokenWithNoPair`.
+
+```solidity
+function createToken(TokenCreationParams memory _params)
+    public
+    nonReentrant
+    returns (address token, address pair);
+
+function createTokenWithNoPair(TokenCreationParams memory _params)
+    public
+    nonReentrant
+    returns (address token, address pair);
+```
+
+`createToken` also creates a PancakeSwap V2 pair.  
+`createTokenWithNoPair` returns `pair = address(0)`.
+
+## Token type indexes
+
+```solidity
+enum TokenType {
+    BasicToken,        // 1
+    MintableToken,     // 2
+    BurnableToken,     // 3
+    PausableToken,     // 4  (not this page)
+    TaxToken,          // 5  (not this page)
+    ConfigurableToken  // 6  (not this page)
+}
+```
+
+| Human type   | `tokenType` | Implementation slot | Init used |
+| ------------ | ----------- | ------------------- | --------- |
+| Tax-free     | `1`         | `token1`            | `IToken1.initialize` |
+| Mintable     | `2`         | `token2`            | `IToken1.initialize` |
+| Burnable     | `3`         | `token3`            | `IToken1.initialize` |
+
+Types `1`, `2`, and `3` all go through `_createNonTaxToken`.  
+Tax fields and the mint/burn/pause flags on the struct are **not** passed into initialize for these types. The behavior comes from the implementation you clone.
+
+## Struct
+
+```solidity
+struct TokenCreationParams {
+    string name;
+    string symbol;
+    uint256 initialSupply;
+    address owner;
+    address recipient;
+    uint tokenType;              // 1, 2, or 3
+    uint256 buyTax;              // ignored
+    uint256 sellTax;             // ignored
+    uint256 transferTax;         // ignored
+    address[] taxRecipients;     // ignored
+    uint256[] taxPercentages;    // ignored
+    uint expirationDate;         // ignored
+    address pairedToken;         // pair quote asset; address(0) = WETH
+    bool isMintable;             // ignored for types 1–3
+    bool isBurnable;             // ignored for types 1–3
+    bool isPausable;             // ignored for types 1–3
+}
+```
+
+## Human field → Solidity field
+
+| UI / human name | Solidity field              | Notes |
+| --------------- | --------------------------- | ----- |
+| Token Name      | `name`                      | |
+| Token Symbol    | `symbol`                    | |
+| Token Supply    | `initialSupply`             | Minted to `recipient` |
+| Owner           | `owner`                     | Contract owner after init |
+| Recipient       | `recipient`                 | Gets the minted supply |
+| Payment Token   | `pairedToken`               | Only used if a pair is created |
+| Token type      | `tokenType`                 | `1`, `2`, or `3` |
+
+Leave tax arrays empty. Set tax values to `0`. Flags can stay `false`.
+
+## What initialize receives
+
+For types 1–3:
+
+```solidity
+IToken1(token).initialize(
+    name,
+    symbol,
+    initialSupply,
+    owner,
+    recipient
+);
+```
+
+Nothing else from the struct is forwarded.
+
+## Pair rules
+
+`pairedToken == address(0)` is treated as WETH:
+
+```solidity
+pairedToken == address(0) ? router.WETH() : pairedToken
+```
+
+Router used by the factory:
+
+`0x10ED43C718714eb63d5aA57B78B54704E256024E` (PancakeSwap V2)
+
+`createToken` / `_createNonTaxToken` only calls `createPair`. It does not add liquidity and does not take `msg.value`.
+
+## Address prediction
+
+```solidity
+function predictNextTokenAddress(
+    address creator,
+    uint256 tokenType,
+    string calldata name,
+    string calldata symbol
+) external view returns (address predicted);
+```
+
+Salt is:
+
+```solidity
+keccak256(abi.encode(
+    msg.sender,   // creator
+    name,
+    symbol,
+    tokenType,
+    createdTokenCount[creator]
+))
+```
+
+Use the same `creator` that will call `createToken`.
+
+## Minimal examples
+
+Tax-free, with pair against BNB:
+
+```solidity
+TokenCreationParams memory params = TokenCreationParams({
+    name: "My Token",
+    symbol: "MTK",
+    initialSupply: 1_000_000 ether,
+    owner: msg.sender,
+    recipient: msg.sender,
+    tokenType: 1,
+    buyTax: 0,
+    sellTax: 0,
+    transferTax: 0,
+    taxRecipients: new address[](0),
+    taxPercentages: new uint256[](0),
+    expirationDate: 0,
+    pairedToken: address(0),
+    isMintable: false,
+    isBurnable: false,
+    isPausable: false
+});
+
+(address token, address pair) = factory.createToken(params);
+```
+
+Mintable, no pair:
+
+```solidity
+params.tokenType = 2;
+(address token, ) = factory.createTokenWithNoPair(params);
+```
+
+Burnable, pair against an ERC-20:
+
+```solidity
+params.tokenType = 3;
+params.pairedToken = usdt;
+(address token, address pair) = factory.createToken(params);
+```

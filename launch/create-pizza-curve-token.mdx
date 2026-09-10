@@ -1,0 +1,343 @@
+---
+title: "Create a Pizza Curve Token"
+description: "Create and launch a token through the WPizza Pizza Curve."
+---
+
+## Launch Parameters
+
+When creating a Pizza Curve token, you configure the following parameters:
+
+| Parameter                 | Description                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| **Token Name**            | Name of the token.                                                                 |
+| **Token Symbol**          | Token ticker/symbol.                                                               |
+| **Token Supply**          | Initial supply created for the market.                                             |
+| **Payment Token**         | Asset used to buy and sell the token. BNB and supported ERC-20 tokens can be used. |
+| **Virtual Token Amount**  | Amount of virtual payment tokens used by the bonding curve for pricing.            |
+| **Target Payment Amount** | Amount of real payment tokens the market must accumulate before graduation.        |
+| **Initial Buy Amount**    | Payment-token amount used for the creator's initial purchase.                      |
+| **Buy Tax**               | Tax applied when buying the token, if enabled.                                     |
+| **Sell Tax**              | Tax applied when selling the token, if enabled.                                    |
+| **Transfer Tax**          | Tax applied to regular token transfers, if enabled.                                |
+
+The most important Pizza Curve parameters are the **virtual token amount**, **target payment amount**, and **initial buy amount**.
+
+## How the Market Is Created
+
+When you confirm the launch, WPizza performs the following steps:
+
+### 1. Token Creation
+
+WPizza creates the project token with the parameters you selected.
+
+The token is temporarily controlled by the launch system during market setup.
+
+### 2. Virtual Token Creation
+
+WPizza creates a dedicated virtual token for the market.
+
+The virtual token is used internally by the Pizza Curve and is not the token being launched.
+
+Its purpose is to provide the virtual reserve used by the bonding-curve pricing mechanism.
+
+### 3. Pizza Curve Pair
+
+A dedicated Pizza Curve pair is created for the token.
+
+The pair contains:
+
+- **Token 0:** Your project token
+- **Token 1:** Real payment token
+- **Token 2:** Virtual payment token
+
+The pair tracks both the virtual reserve used for pricing and the real payment-token reserve accumulated by the market.
+
+### 4. Initial Liquidity
+
+The project token and virtual token are added to the pair.
+
+This establishes the initial virtual reserve required for trading.
+
+At this point, the market is ready to operate.
+
+### 5. Initial Buy
+
+The configured **Initial Buy Amount** is used to perform the first purchase.
+
+The purchased tokens are sent to the configured initial recipient.
+
+The market now has its first real trading activity.
+
+## Trading
+
+Once the market is open, users can buy and sell the token through WPizzaDex.
+
+### Buy
+
+When a user buys:
+
+1. The user sends the payment token.
+2. The real payment-token reserve increases.
+3. Virtual tokens are minted to the pair.
+4. The bonding curve calculates the token output.
+5. The project tokens are sent to the buyer.
+
+The virtual reserve is used for the curve's pricing calculation.
+
+### Sell
+
+When a user sells:
+
+1. The user sends project tokens to the pair.
+2. The curve calculates the payment-token output.
+3. Virtual tokens are burned.
+4. The real payment token is sent to the seller.
+5. The reserves are updated.
+
+## Real Liquidity vs Virtual Liquidity
+
+The Pizza Curve uses two different types of reserves.
+
+### Virtual Reserve
+
+The virtual token reserve is used by the bonding curve to determine trading prices.
+
+It represents the virtual side of the market and is not real payment-token liquidity.
+
+### Real Reserve
+
+The real payment-token reserve contains the actual payment tokens accumulated through trading.
+
+This reserve is **not used as the main pricing reserve**.
+
+Instead, it determines when the market has reached its graduation target.
+
+## Graduation
+
+The market continuously checks:
+
+**Real Payment Reserve ≥ Target Payment Amount**
+
+Once the real payment-token reserve reaches the configured target, the Pizza Curve automatically graduates.
+
+After graduation:
+
+- Trading on the Pizza Curve ends.
+- The market is marked as completed.
+- The required amount of project tokens for the new liquidity pool is calculated.
+- The creator reward is calculated.
+- Eligible creator tokens are locked.
+- Remaining unnecessary project tokens are burned.
+- PancakeSwap V2 liquidity is created.
+- The resulting LP tokens are permanently locked.
+
+## Creator Reward
+
+At graduation, the protocol calculates how many project tokens remain after determining the amount required for PancakeSwap liquidity.
+
+The creator receives:
+
+**5% of the eligible remaining tokens**
+
+The creator reward is sent to WPizza Lock and locked according to the market's launch duration.
+
+## PancakeSwap V2 Migration
+
+The accumulated real payment-token reserve becomes the payment-token side of the new PancakeSwap V2 liquidity pool.
+
+The required amount of project tokens is added alongside it.
+
+The resulting LP tokens are configured as:
+
+- **100% locked**
+- **Permanent lock**
+
+The final flow is therefore:
+
+**Token Creation**
+↓
+**Pizza Curve Market**
+↓
+**Initial Liquidity**
+↓
+**Initial Buy**
+↓
+**Public Trading**
+↓
+**Real Payment Reserve Grows**
+↓
+**Target Reached**
+↓
+**Graduation**
+↓
+**PancakeSwap V2 Liquidity**
+↓
+**LP Permanently Locked**
+
+## In Short
+
+A Pizza Curve token does not simply create a token.
+
+It creates a complete launch market where:
+
+- The token is created.
+- A dedicated market is opened.
+- Virtual liquidity establishes the initial pricing mechanism.
+- Users trade against the curve.
+- Real payment-token liquidity accumulates.
+- Reaching the target automatically triggers graduation.
+- The accumulated liquidity is moved into PancakeSwap V2.
+- The resulting LP is permanently locked.
+
+This allows a token to move from **launch → trading → liquidity growth → PancakeSwap** without requiring the creator to manually manage each stage.
+
+---
+
+# For developers
+
+Use `WpizzaFactory.createPair(PairCreationParams)` to launch a Pizza Curve market.
+
+```solidity
+function createPair(PairCreationParams memory params)
+    external
+    payable
+    nonReentrant
+    returns (address pair);
+```
+
+If the payment token is native BNB, set `pairedToken` to `address(0)` and send `msg.value == creatorInitialBuyAmount`.  
+If the payment token is an ERC-20, approve the factory for `creatorInitialBuyAmount` and send `msg.value = 0`.
+
+## Structs
+
+```solidity
+struct PairCreationParams {
+    TokenCreationParams creationParams;
+    uint tokenAmount;                  // project token supply added to the curve
+    uint virtualTokenAmount;           // virtual payment reserve used for pricing
+    uint targetPaymentTokenAmount;     // real payment reserve needed to graduate
+    uint creatorInitialBuyAmount;      // first buy, paid by the caller
+}
+
+struct TokenCreationParams {
+    string name;
+    string symbol;
+    uint256 initialSupply;             // overwritten to tokenAmount by the factory
+    address owner;                     // final token owner after setup
+    address recipient;                 // receives the initial buy
+    uint tokenType;                    // overwritten to 6 (mintable/burnable token)
+    uint256 buyTax;
+    uint256 sellTax;
+    uint256 transferTax;
+    address[] taxRecipients;
+    uint256[] taxPercentages;
+    uint expirationDate;
+    address pairedToken;               // address(0) = BNB / WETH
+    bool isMintable;
+    bool isBurnable;                   // overwritten to true
+    bool isPausable;
+}
+```
+
+## Human field → Solidity field
+
+| UI / human name           | Solidity field                         | Notes |
+| ------------------------- | -------------------------------------- | ----- |
+| Token Name                | `creationParams.name`                  | |
+| Token Symbol              | `creationParams.symbol`                | |
+| Token Supply              | `tokenAmount`                          | Factory also sets `creationParams.initialSupply = tokenAmount` |
+| Token owner               | `creationParams.owner`                 | Temporarily taken by the factory, then returned |
+| Initial buy recipient     | `creationParams.recipient`             | Receives tokens from the first buy |
+| Payment Token             | `creationParams.pairedToken`           | `address(0)` wraps to WETH |
+| Virtual Token Amount      | `virtualTokenAmount`                   | Must be `>= targetPaymentTokenAmount` |
+| Target Payment Amount     | `targetPaymentTokenAmount`             | Graduation when `reserve2 >=` this |
+| Initial Buy Amount        | `creatorInitialBuyAmount`              | Paid in BNB (`msg.value`) or ERC-20 |
+| Buy Tax                   | `creationParams.buyTax`                | `0` disables |
+| Sell Tax                  | `creationParams.sellTax`               | `0` disables |
+| Transfer Tax              | `creationParams.transferTax`           | `0` disables |
+| Tax recipients            | `creationParams.taxRecipients`         | Must match `taxPercentages` length |
+| Tax percentages           | `creationParams.taxPercentages`        | |
+
+## What the factory overwrites
+
+These values are set by `createPair` even if you pass something else:
+
+- `creationParams.recipient` → factory during setup
+- `creationParams.owner` → factory during setup, then restored to your `owner`
+- `creationParams.initialSupply` → `tokenAmount`
+- `creationParams.tokenType` → `6`
+- `creationParams.isBurnable` → `true`
+
+The factory also creates the virtual token itself. You do not pass virtual-token name/symbol.
+
+## Validation rules
+
+The call reverts if:
+
+- `tokenAmount == 0`
+- `virtualTokenAmount == 0`
+- `targetPaymentTokenAmount == 0`
+- `creatorInitialBuyAmount == 0`
+- `virtualTokenAmount < targetPaymentTokenAmount`
+- native launch and `msg.value != creatorInitialBuyAmount`
+- ERC-20 launch and `msg.value > 0`
+- ERC-20 deposit received `!= creatorInitialBuyAmount`
+- `wPizzaV2Router` or `wPizzaLock` is unset
+- a pair already exists for that token + payment token
+
+## Pair layout after launch
+
+| Slot     | Token                         | Role |
+| -------- | ----------------------------- | ---- |
+| `token0` | project token                 | traded token |
+| `token1` | payment token (WETH or ERC-20)| real reserve (`reserve2`) |
+| `token2` | virtual payment token         | pricing reserve (`reserve1`) |
+
+Pricing uses `token0` × `token2`.  
+Graduation uses real `token1` balance vs `targetPaymentTokenAmount`.
+
+## Graduation (on-chain)
+
+When `reserve2 >= targetReserve2Amount`, `_launch()`:
+
+1. Stops Pizza Curve trading (`end = block.timestamp`)
+2. Computes project tokens needed for PancakeSwap:  
+   `amountToken0Needed = realReserve * projectBalance / virtualBalance`
+3. Gives the creator `5%` of leftover project tokens (`CREATOR_REWARD = 5`)
+4. Burns the rest of the leftover project tokens
+5. Locks creator tokens for `launchDuration` (`now - start`)
+6. Calls `launchToken` with `lpPercentToLock = 10_000` and `lpReleaseDate = type(uint).max`
+7. Burns remaining virtual tokens
+
+## Minimal example
+
+```solidity
+TokenCreationParams memory tokenParams = TokenCreationParams({
+    name: "My Token",
+    symbol: "MTK",
+    initialSupply: 0,                  // overwritten
+    owner: msg.sender,
+    recipient: msg.sender,
+    tokenType: 6,                      // overwritten to 6
+    buyTax: 0,
+    sellTax: 0,
+    transferTax: 0,
+    taxRecipients: new address[](0),
+    taxPercentages: new uint256[](0),
+    expirationDate: 0,
+    pairedToken: address(0),           // BNB
+    isMintable: false,
+    isBurnable: true,
+    isPausable: false
+});
+
+PairCreationParams memory params = PairCreationParams({
+    creationParams: tokenParams,
+    tokenAmount: 1_000_000 ether,
+    virtualTokenAmount: 100 ether,
+    targetPaymentTokenAmount: 80 ether,
+    creatorInitialBuyAmount: 1 ether
+});
+
+address pair = factory.createPair{value: 1 ether}(params);
+```

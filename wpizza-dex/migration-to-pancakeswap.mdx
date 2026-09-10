@@ -1,0 +1,107 @@
+---
+title: "Migration to PancakeSwap"
+description: "When the real reserve hits the target, the Pizza Curve pair graduates into a locked PancakeSwap V2 pool."
+---
+
+# Migration to PancakeSwap
+
+Graduation is automatic. The pair does it inside `swap` when the real payment reserve reaches the target set at launch.
+
+No one calls a separate “migrate” function.
+
+Background: [What is WPizza Dex](./what-is-wpizza-dex.mdx) and [WPizza Pair](./wpizza-pair.mdx).
+
+## Trigger
+
+```text
+real payment reserve (reserve2) >= targetReserve2Amount
+```
+
+Then `_launch()` runs in the same transaction as the swap that crossed the line.
+
+## What buyers see
+
+- Pizza Curve trading stops (`end = now`)
+- Later curve swaps revert with `ENDED`
+- A PancakeSwap V2 pool exists for project token + payment token
+- That LP is locked with no unlock date (`type(uint).max`)
+- The creator’s leftover allocation is locked for the length of the curve (`now - start`)
+
+After this, buy and sell on PancakeSwap, not on the WPizza router.
+
+## What the pair does
+
+1. Reads project balance, real payment balance, virtual balance
+2. Sizes the new pool at the current virtual price:
+
+   `projectForLp = realPayment * projectBalance / virtualBalance`
+
+3. Leftover project tokens:
+   - **5%** to the creator, locked
+   - the rest burned
+4. Approves the token factory and calls `launchToken`
+5. Burns remaining virtual tokens
+6. Burns any project dust left on the pair
+
+`launchToken` is the same function described in [Add Initial Liquidity](../launch/add-initial-liquidity.mdx). Here the pair is the caller. LP recipient is `0xdeaD`, lock percent is 100%, release date is forever.
+
+The 1% WPizza LP cut from that path still applies.
+
+## After graduation
+
+| Item | State |
+| ---- | ----- |
+| Pizza Curve pair | ended, empty of useful balances |
+| Virtual token | burned |
+| PancakeSwap pair | live |
+| LP | permanently locked |
+| Creator remainder | locked for market duration |
+
+---
+
+# For developers
+
+Inside `WpizzaPair._launch()`:
+
+```solidity
+end = block.timestamp;
+
+amountToken0Needed = balance1 * balance0 / balance2;
+tokenLeft = balance0 - amountToken0Needed;
+creatorTokens = tokenLeft * 5 / 100;
+toBurn = tokenLeft - creatorTokens;
+```
+
+Then:
+
+```solidity
+IWpizzaLock.lock(
+    creator,
+    token0,
+    false,
+    creatorTokens,
+    block.timestamp + duration,
+    "CREATOR WPIZZA FAIR LAUNCH LOCK"
+);
+
+IWpizzaTokenFactory.launchToken{value: 0}(
+    TokenLaunchParams({
+        ...,
+        initialLpAmountInPairedToken: balance1,
+        initialTokenAmountToAdd: amountToken0Needed,
+        lpRecipient: address(0xdeaD),
+        lpPercentToLock: 10_000,
+        shouldLockLp: true,
+        lpReleaseDate: type(uint).max,
+        lockDescription: "LP TOKENS LOCKED FOREVER"
+    }),
+    token0
+);
+```
+
+`pairedToken` passed into that call is `token1` (already WETH if the market was opened with BNB).
+
+Require before launch:
+
+- `balance1 >= targetReserve2Amount`
+- `balance0 > 0`

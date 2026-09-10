@@ -1,0 +1,151 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "appearance": {
+    "default": "light"
+  },
+  "name": "WPizza Launchpad",
+  "description": "Documentation for WPizza — token creation, presales, WPizzaDex, liquidity management, and token locking on BNB Smart Chain.",
+  "colors": {
+    "primary": "#EAB024",
+    "light": "#F5C84C",
+    "dark": "#F5B730"
+  },
+  "favicon": "/favicon.ico",
+  "icons": {
+    "library": "lucide"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs"
+  },
+  "contextual": {
+    "options": ["copy", "view", "assistant", "mcp", "add-mcp"]
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Home",
+          "icon": "house",
+          "href": "/"
+        },
+        {
+          "anchor": "WPizza App",
+          "icon": "rocket",
+          "href": "https://wpizza.fun"
+        },
+        {
+          "anchor": "Support",
+          "icon": "message-circle",
+          "href": "https://t.me/donaopennode"
+        },
+        {
+          "anchor": "Telegram",
+          "icon": "send",
+          "href": "https://t.me/wpizzachannel"
+        },
+        {
+          "anchor": "Discord",
+          "icon": "messages-square",
+          "href": "https://discord.gg/bZrAK2zFE"
+        },
+        {
+          "anchor": "OpenNode",
+          "icon": "code",
+          "href": "https://opennode.dev"
+        },
+        {
+          "anchor": "Community",
+          "icon": "globe",
+          "href": "https://x.com/wpizzafun"
+        }
+      ]
+    },
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Introduction",
+            "icon": "book-open",
+            "pages": [
+              "introduction/what-is-wpizza"
+            ]
+          },
+          {
+            "group": "Launch & Create",
+            "icon": "rocket",
+            "pages": [
+              "launch/create-a-tax-free-token",
+              "launch/create-a-tax-token",
+              "launch/create-pizza-curve-token",
+              "launch/create-a-presale",
+              "launch/add-initial-liquidity"
+            ]
+          },
+          {
+            "group": "WPizzaDex",
+            "icon": "chart-candlestick",
+            "pages": [
+              "wpizza-dex/what-is-wpizza-dex",
+              "wpizza-dex/wpizza-pair",
+              "wpizza-dex/wpizza-factory",
+              "wpizza-dex/wpizza-router",
+              "wpizza-dex/migration-to-pancakeswap"
+            ]
+          },
+          {
+            "group": "WPizza Lock",
+            "icon": "lock",
+            "pages": [
+              "wpizza-lock/what-is-wpizza-lock"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developers",
+        "groups": [
+          {
+            "group": "Contracts",
+            "icon": "code",
+            "pages": [
+              "contracts/wpizza-dex-contracts",
+              "contracts/wpizza-token-factory-contrats"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Reference",
+            "icon": "library",
+            "pages": [
+              "resources/supported-networks",
+              "resources/wpizza-listings"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/dark-light.png",
+    "dark": "/logo/dark-light.png"
+  },
+  "navbar": {
+    "links": [],
+    "primary": {
+      "type": "button",
+      "label": "Launch WPizza",
+      "href": "https://wpizza.fun"
+    }
+  },
+  "footer": {
+    "socials": {
+      "x": "https://x.com/wpizzafun"
+    }
+  }
+}

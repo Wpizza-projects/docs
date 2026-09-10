@@ -1,0 +1,54 @@
+---
+title: "What is WPizza Dex"
+description: "WPizza Dex is the Pizza Curve market: a three-token pair that prices with virtual reserves and graduates to PancakeSwap."
+---
+
+# What is WPizza Dex
+
+WPizza Dex is not a general AMM like PancakeSwap.
+
+It is the market that runs **while a Pizza Curve token is launching**. People buy and sell against a curve. When enough real payment tokens have come in, the market closes and the liquidity moves to PancakeSwap V2.
+
+If you only want a normal pool, use [Add Initial Liquidity](../launch/add-initial-liquidity.mdx). This section is for the curve market only.
+
+## The three pieces
+
+| Piece | Contract | Role |
+| ----- | -------- | ---- |
+| Factory | `WpizzaFactory` | Opens the market, clones the pair, records launches |
+| Pair | `WpizzaPair` | Holds reserves, prices trades, graduates |
+| Router | `WpizzaRouterV2` | Adds the first virtual liquidity and routes swaps |
+
+How to set the launch fields is on [Create a Pizza Curve Token](../launch/create-pizza-curve-token.md).
+
+## How a market looks
+
+Each pair has three tokens:
+
+- **Token 0** — the project token
+- **Token 1** — the real payment token (WETH or an ERC-20)
+- **Token 2** — a virtual payment token, minted and burned as people trade
+
+Price comes from token 0 × token 2.  
+Graduation watches token 1 (the real reserve).
+
+Buyers pay token 1. The pair mints the same amount of token 2 so the curve can move. Sellers receive token 1 and the pair burns token 2.
+
+## Life of a market
+
+1. Factory creates the project token and the virtual token
+2. Factory clones a pair and seeds virtual liquidity
+3. Factory runs the creator’s first buy
+4. Public trading goes through the router
+5. Real reserve grows
+6. When it hits the target, the pair graduates
+7. PancakeSwap V2 LP is created and locked forever
+
+After graduation the pair stops (`end` is set). Further Pizza Curve swaps revert.
+
+## What this Dex does not do
+
+- It does not list arbitrary token pairs
+- You cannot add extra Pizza Curve liquidity later (`addLiquidity` is the seed call)
+- You cannot remove Pizza Curve liquidity (`burn` returns nothing)
+- It does not replace PancakeSwap after graduation
